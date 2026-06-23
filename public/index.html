@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KK23 Bonus</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">KK23</p>
+          <h1>Панель бариста</h1>
+        </div>
+        <div class="status" id="status">Готово</div>
+      </section>
+
+      <section class="workspace">
+        <form class="panel" id="searchForm">
+          <h2>Найти гостя</h2>
+          <label>
+            PIN или последние 4 цифры телефона
+            <input id="searchValue" inputmode="numeric" maxlength="16" autocomplete="off" placeholder="4321" />
+          </label>
+          <button type="submit">Найти</button>
+        </form>
+
+        <form class="panel" id="registerForm">
+          <h2>Новый гость</h2>
+          <label>
+            Имя
+            <input id="guestName" autocomplete="name" placeholder="Елена" />
+          </label>
+          <label>
+            Телефон
+            <input id="guestPhone" inputmode="tel" autocomplete="tel" placeholder="+7 999 123-45-67" />
+          </label>
+          <button type="submit">Создать карту</button>
+        </form>
+
+        <section class="guest" id="guestCard" hidden>
+          <div class="guestHeader">
+            <div>
+              <p class="eyebrow">Гость</p>
+              <h2 id="guestTitle"></h2>
+            </div>
+            <img id="cardPreview" alt="Бонусная карта KK23" />
+          </div>
+
+          <dl class="stats">
+            <div>
+              <dt>PIN</dt>
+              <dd id="guestPin"></dd>
+            </div>
+            <div>
+              <dt>Баланс</dt>
+              <dd id="guestBalance"></dd>
+            </div>
+            <div>
+              <dt>Уровень</dt>
+              <dd id="guestLevel"></dd>
+            </div>
+            <div>
+              <dt>Покупки</dt>
+              <dd id="guestTotal"></dd>
+            </div>
+          </dl>
+
+          <div class="actions">
+            <form id="earnForm">
+              <label>
+                Сумма чека
+                <input id="earnAmount" inputmode="numeric" placeholder="400" />
+              </label>
+              <button type="submit">Начислить</button>
+            </form>
+
+            <form id="spendForm">
+              <label>
+                Баллы к списанию
+                <input id="spendPoints" inputmode="numeric" placeholder="150" />
+              </label>
+              <button type="submit">Списать</button>
+            </form>
+          </div>
+
+          <section class="history">
+            <h3>История</h3>
+            <div id="historyList"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
