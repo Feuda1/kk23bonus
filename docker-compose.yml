@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kk23bonus-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kk23bonus
+      POSTGRES_USER: kk23bonus
+      POSTGRES_PASSWORD: ${KK23_POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - kk23bonus_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kk23bonus -d kk23bonus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  kk23bonus_pg_data:
