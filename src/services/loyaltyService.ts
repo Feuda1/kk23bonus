@@ -33,6 +33,10 @@ export class LoyaltyService {
     return this.store.getGuestByTelegramId(tgId);
   }
 
+  async updateTelegramCardMessage(guestId: string, messageId: number): Promise<Guest> {
+    return this.store.updateTelegramCardMessage(guestId, messageId);
+  }
+
   async earn(input: { guestId: string; amount: number; baristaId?: string | null }): Promise<{ guest: Guest; transaction: Transaction }> {
     const guest = await this.store.getGuest(input.guestId);
     if (!guest) throw new Error("Guest not found");

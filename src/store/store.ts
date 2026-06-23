@@ -14,6 +14,7 @@ export type LoyaltyStore = {
   getGuestByTelegramId(tgId: string): Promise<Guest | null>;
   searchGuest(input: SearchGuestInput): Promise<Guest | null>;
   updateCardTimestamp(guestId: string): Promise<Guest>;
+  updateTelegramCardMessage(guestId: string, messageId: number): Promise<Guest>;
   earnPoints(input: { guestId: string; amount: number; points: number; baristaId?: string | null }): Promise<{ guest: Guest; transaction: Transaction }>;
   createPendingSpend(input: { guestId: string; points: number; baristaId?: string | null }): Promise<PendingTransaction>;
   getPending(id: string): Promise<PendingTransaction | null>;

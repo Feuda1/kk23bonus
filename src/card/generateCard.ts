@@ -37,7 +37,7 @@ export async function generateLoyaltyCard(guest: Guest): Promise<Buffer> {
         <feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="#160a04" flood-opacity="0.45"/>
       </filter>
     </defs>
-    <rect width="1200" height="720" rx="52" fill="url(#bg)"/>
+    <rect width="1200" height="720" fill="url(#bg)"/>
     <path d="M0 0H1200V720H0V0Z" fill="#1d0e08" opacity="0.18"/>
     <circle cx="930" cy="360" r="190" fill="url(#cup)" filter="url(#shadow)"/>
     <circle cx="930" cy="360" r="132" fill="#f1c995"/>

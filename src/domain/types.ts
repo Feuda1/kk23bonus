@@ -11,6 +11,7 @@ export type Guest = {
   level: LoyaltyLevel;
   lastVisit: string | null;
   tgId: string | null;
+  tgCardMessageId: number | null;
   cardUpdatedAt: string | null;
   createdAt: string;
 };

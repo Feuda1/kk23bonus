@@ -55,6 +55,7 @@ export class MemoryStore implements LoyaltyStore {
       level: "guest",
       lastVisit: null,
       tgId,
+      tgCardMessageId: null,
       cardUpdatedAt: null,
       createdAt: nowIso(),
     };
@@ -85,6 +86,13 @@ export class MemoryStore implements LoyaltyStore {
   async updateCardTimestamp(guestId: string): Promise<Guest> {
     const guest = await this.requireGuest(guestId);
     const updated = { ...guest, cardUpdatedAt: nowIso() };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async updateTelegramCardMessage(guestId: string, messageId: number): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, tgCardMessageId: messageId };
     this.guests.set(updated.id, updated);
     return updated;
   }

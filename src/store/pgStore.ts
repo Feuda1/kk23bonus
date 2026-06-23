@@ -16,6 +16,7 @@ type DbGuest = {
   level: Guest["level"];
   last_visit: Date | null;
   tg_id: string | number | null;
+  tg_card_message_id: number | null;
   card_updated_at: Date | null;
   created_at: Date;
 };
@@ -121,6 +122,15 @@ export class PgStore implements LoyaltyStore {
 
   async updateCardTimestamp(guestId: string): Promise<Guest> {
     const result = await this.pool.query<DbGuest>("UPDATE guests SET card_updated_at = now() WHERE id = $1 RETURNING *", [guestId]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async updateTelegramCardMessage(guestId: string, messageId: number): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET tg_card_message_id = $1 WHERE id = $2 RETURNING *", [
+      messageId,
+      guestId,
+    ]);
     if (!result.rows[0]) throw new Error("Guest not found");
     return mapGuest(result.rows[0]);
   }
@@ -307,6 +317,7 @@ function mapGuest(row: DbGuest): Guest {
     level: row.level,
     lastVisit: row.last_visit?.toISOString() ?? null,
     tgId: row.tg_id === null ? null : String(row.tg_id),
+    tgCardMessageId: row.tg_card_message_id,
     cardUpdatedAt: row.card_updated_at?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
   };

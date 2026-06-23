@@ -11,9 +11,12 @@ CREATE TABLE IF NOT EXISTS guests (
   level VARCHAR NOT NULL DEFAULT 'guest',
   last_visit TIMESTAMPTZ,
   tg_id BIGINT UNIQUE,
+  tg_card_message_id INTEGER,
   card_updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS tg_card_message_id INTEGER;
 
 CREATE TABLE IF NOT EXISTS transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
