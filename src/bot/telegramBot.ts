@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, InputFile, InputMediaBuilder, Keyboard } from "grammy";
+import { Bot, InlineKeyboard, InputFile, Keyboard } from "grammy";
 import type { Context } from "grammy";
 import { generateLoyaltyCard } from "../card/generateCard.js";
 import type { Guest, PendingTransaction, Transaction } from "../domain/types.js";
@@ -6,10 +6,10 @@ import type { LoyaltyService } from "../services/loyaltyService.js";
 import type { LoyaltyNotifier } from "../services/notifier.js";
 
 const CONTACT_KEYBOARD = new Keyboard().requestContact("Отправить телефон").oneTime().resized();
-const REMOVE_KEYBOARD = { remove_keyboard: true } as const;
 const BOT_DESCRIPTION =
   "Бонусная карта KK23: PIN для кассы, баланс баллов, история начислений и безопасное подтверждение списаний.";
 const BOT_SHORT_DESCRIPTION = "Бонусная карта KK23 с PIN и балансом.";
+const CARD_KEYBOARD = new InlineKeyboard().text("Обновить карту", "card:refresh");
 
 export class TelegramLoyaltyBot implements LoyaltyNotifier {
   private readonly bot: Bot;
@@ -66,7 +66,7 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
       const chatId = ctx.chat.id;
       const existing = await this.service.getGuestByTelegramId(String(ctx.from?.id ?? chatId));
       if (existing) {
-        await this.deliverCard(existing);
+        await this.deliverCard(existing, { cleanupPrevious: true });
         return;
       }
 
@@ -80,13 +80,23 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
       await this.safeDeleteCurrentMessage(ctx);
       const guest = await this.service.getGuestByTelegramId(String(ctx.from?.id ?? ctx.chat.id));
       if (guest) {
-        await this.deliverCard(guest);
+        await this.deliverCard(guest, { cleanupPrevious: true });
         return;
       }
       const prompt = await ctx.reply("Подтвердите телефон, чтобы выпустить карту KK23.", {
         reply_markup: CONTACT_KEYBOARD,
       });
       this.contactPromptMessages.set(ctx.chat.id, prompt.message_id);
+    });
+
+    this.bot.callbackQuery("card:refresh", async (ctx) => {
+      const guest = await this.service.getGuestByTelegramId(String(ctx.from?.id ?? ctx.chat?.id));
+      if (!guest) {
+        await ctx.answerCallbackQuery({ text: "Карта ещё не выпущена", show_alert: true });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: "Карта обновлена" });
+      await this.deliverCard(guest, { cleanupPrevious: true });
     });
 
     this.bot.on("message:contact", async (ctx) => {
@@ -116,12 +126,12 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
       }
 
       if (text === "Показать карту") {
-        await this.deliverCard(guest, { forceNewMessage: true });
+        await this.deliverCard(guest, { cleanupPrevious: true });
         return;
       }
 
       if (text === "Баланс") {
-        await this.deliverCard(guest, { forceNewMessage: true });
+        await this.deliverCard(guest, { cleanupPrevious: true });
       }
     });
 
@@ -154,31 +164,38 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
   private async bootstrap(): Promise<void> {
     await this.bot.api.setMyDescription(BOT_DESCRIPTION);
     await this.bot.api.setMyShortDescription(BOT_SHORT_DESCRIPTION);
-    await this.bot.api.setMyCommands([
-      { command: "card", description: "Card" },
-    ]);
+    await this.bot.api.deleteMyCommands();
+    await this.bot.api.setChatMenuButton({ menu_button: { type: "default" } });
     this.bot.catch((error) => {
       console.error("Telegram bot error", error);
     });
     await this.bot.start();
   }
 
-  private async deliverCard(guest: Guest, options: { forceNewMessage?: boolean } = {}): Promise<void> {
+  private async deliverCard(guest: Guest, options: { cleanupPrevious?: boolean } = {}): Promise<void> {
     if (!guest.tgId) return;
     const image = await generateLoyaltyCard(guest);
     const file = new InputFile(image, `kk23-${guest.loyaltyCode}.png`);
+    const caption = this.makeCardCaption(guest);
 
-    if (guest.tgCardMessageId && !options.forceNewMessage) {
-      try {
-        await this.bot.api.editMessageMedia(guest.tgId, guest.tgCardMessageId, InputMediaBuilder.photo(file));
-        return;
-      } catch {
-        // If Telegram can no longer edit the old card, send a fresh one and remember it.
+    if (guest.tgCardMessageId) {
+      if (options.cleanupPrevious) {
+        await this.deleteMessageWindow(guest.tgId, guest.tgCardMessageId, 8);
+      } else {
+        await this.safeDeleteMessage(guest.tgId, guest.tgCardMessageId);
       }
     }
 
-    const message = await this.bot.api.sendPhoto(guest.tgId, file, { reply_markup: REMOVE_KEYBOARD });
+    const message = await this.bot.api.sendPhoto(guest.tgId, file, {
+      caption,
+      reply_markup: CARD_KEYBOARD,
+    });
     await this.service.updateTelegramCardMessage(guest.id, message.message_id);
+  }
+
+  private makeCardCaption(guest: Guest): string {
+    const level = guest.level === "guest" ? "Гость" : guest.level === "regular" ? "Постоянный" : "Свой";
+    return [`PIN: ${guest.loyaltyCode}`, `Баланс: ${guest.balance} баллов`, `Уровень: ${level}`].join("\n");
   }
 
   private async deleteStoredContactPrompt(chatId: number): Promise<void> {
@@ -204,5 +221,10 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
     try {
       await this.bot.api.deleteMessage(chatId, messageId);
     } catch {}
+  }
+
+  private async deleteMessageWindow(chatId: number | string, lastMessageId: number, count: number): Promise<void> {
+    const ids = Array.from({ length: count }, (_, index) => lastMessageId - index).filter((id) => id > 0);
+    await Promise.all(ids.map((id) => this.safeDeleteMessage(chatId, id)));
   }
 }
