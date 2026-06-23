@@ -6,10 +6,10 @@ import type { LoyaltyService } from "../services/loyaltyService.js";
 import type { LoyaltyNotifier } from "../services/notifier.js";
 
 const CONTACT_KEYBOARD = new Keyboard().requestContact("Отправить телефон").oneTime().resized();
+const MAIN_KEYBOARD = new Keyboard().text("☕ Карта").persistent().resized().placeholder("Ваша карта KK23");
 const BOT_DESCRIPTION =
   "Бонусная карта KK23: PIN для кассы, баланс баллов, история начислений и безопасное подтверждение списаний.";
 const BOT_SHORT_DESCRIPTION = "Бонусная карта KK23 с PIN и балансом.";
-const CARD_KEYBOARD = new InlineKeyboard().text("Обновить карту", "card:refresh");
 
 export class TelegramLoyaltyBot implements LoyaltyNotifier {
   private readonly bot: Bot;
@@ -96,7 +96,7 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
         return;
       }
       await ctx.answerCallbackQuery({ text: "Карта обновлена" });
-      await this.deliverCard(guest, { cleanupPrevious: true });
+      await this.deliverCard(guest, { cleanupPrevious: true, previousMessageId: ctx.callbackQuery.message?.message_id });
     });
 
     this.bot.on("message:contact", async (ctx) => {
@@ -125,7 +125,7 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
         return;
       }
 
-      if (text === "Показать карту") {
+      if (["☕ Карта", "Карта", "Показать карту"].includes(text)) {
         await this.deliverCard(guest, { cleanupPrevious: true });
         return;
       }
@@ -172,30 +172,34 @@ export class TelegramLoyaltyBot implements LoyaltyNotifier {
     await this.bot.start();
   }
 
-  private async deliverCard(guest: Guest, options: { cleanupPrevious?: boolean } = {}): Promise<void> {
+  private async deliverCard(
+    guest: Guest,
+    options: { cleanupPrevious?: boolean; previousMessageId?: number } = {},
+  ): Promise<void> {
     if (!guest.tgId) return;
     const image = await generateLoyaltyCard(guest);
     const file = new InputFile(image, `kk23-${guest.loyaltyCode}.png`);
     const caption = this.makeCardCaption(guest);
 
-    if (guest.tgCardMessageId) {
+    const lastMessageId = options.previousMessageId ?? guest.tgCardMessageId;
+    if (lastMessageId) {
       if (options.cleanupPrevious) {
-        await this.deleteMessageWindow(guest.tgId, guest.tgCardMessageId, 8);
+        await this.deleteMessageWindow(guest.tgId, lastMessageId, 8);
       } else {
-        await this.safeDeleteMessage(guest.tgId, guest.tgCardMessageId);
+        await this.safeDeleteMessage(guest.tgId, lastMessageId);
       }
     }
 
     const message = await this.bot.api.sendPhoto(guest.tgId, file, {
       caption,
-      reply_markup: CARD_KEYBOARD,
+      reply_markup: MAIN_KEYBOARD,
     });
     await this.service.updateTelegramCardMessage(guest.id, message.message_id);
   }
 
   private makeCardCaption(guest: Guest): string {
     const level = guest.level === "guest" ? "Гость" : guest.level === "regular" ? "Постоянный" : "Свой";
-    return [`PIN: ${guest.loyaltyCode}`, `Баланс: ${guest.balance} баллов`, `Уровень: ${level}`].join("\n");
+    return [`☕ PIN: ${guest.loyaltyCode}`, `💰 Баланс: ${guest.balance} баллов`, `⭐ Уровень: ${level}`].join("\n");
   }
 
   private async deleteStoredContactPrompt(chatId: number): Promise<void> {
