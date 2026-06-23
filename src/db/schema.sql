@@ -49,4 +49,4 @@ CREATE TABLE IF NOT EXISTS baristas (
 
 CREATE INDEX IF NOT EXISTS transactions_guest_created_idx ON transactions(guest_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS pending_guest_status_idx ON pending_transactions(guest_id, status);
-CREATE INDEX IF NOT EXISTS guests_phone_last4_idx ON guests(right(phone, 4));
+CREATE INDEX IF NOT EXISTS guests_phone_last4_idx ON guests((right(phone, 4)));

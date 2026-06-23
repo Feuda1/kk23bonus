@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import "dotenv/config";
 import pg from "pg";
 
 const { Pool } = pg;
