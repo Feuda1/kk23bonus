@@ -15,6 +15,7 @@ export type VkConfig = {
   confirmationToken: string;
   secretKey: string;
   apiVersion: string;
+  appId?: number;
 };
 
 export function readConfig(): AppConfig {
@@ -42,5 +43,6 @@ function readVkConfig(): VkConfig | undefined {
     confirmationToken,
     secretKey,
     apiVersion: process.env.VK_API_VERSION ?? "5.199",
+    appId: process.env.VK_APP_ID ? Number(process.env.VK_APP_ID) : undefined,
   };
 }

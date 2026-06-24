@@ -23,6 +23,13 @@ const spendSchema = z.object({
   baristaId: z.string().uuid().nullable().optional(),
 });
 
+const vkPhoneSchema = z.object({
+  vkUserId: z.union([z.string(), z.number()]).transform(String),
+  phone: z.string().min(5),
+  firstName: z.string().trim().min(1).max(80).optional(),
+  lastName: z.string().trim().max(80).optional(),
+});
+
 export async function registerRoutes(app: FastifyInstance, service: LoyaltyService): Promise<void> {
   app.get("/health", async () => ({ ok: true }));
 
@@ -75,6 +82,17 @@ export async function registerRoutes(app: FastifyInstance, service: LoyaltyServi
   app.post("/api/transactions/earn", async (request) => {
     const input = earnSchema.parse(request.body);
     return service.earn(input);
+  });
+
+  app.post("/api/vk/phone", async (request, reply) => {
+    const input = vkPhoneSchema.parse(request.body);
+    const name = [input.firstName, input.lastName].filter(Boolean).join(" ").trim() || "Гость";
+    const guest = await service.registerGuest({
+      phone: input.phone,
+      name,
+      vkId: input.vkUserId,
+    });
+    return reply.code(201).send({ guest });
   });
 
   app.post("/api/guests/:id/birthday-reward", async (request, reply) => {

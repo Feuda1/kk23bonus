@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>KK23 Bonus</title>
+    <link rel="stylesheet" href="/vk/styles.css" />
+    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+  </head>
+  <body>
+    <main class="vk-shell">
+      <section class="brand">
+        <div class="logo">KK<br />23</div>
+        <div>
+          <p>Бонусная карта</p>
+          <h1>KK23 Bonus</h1>
+        </div>
+      </section>
+
+      <section class="action">
+        <h2>Подтвердите телефон</h2>
+        <p id="status">VK попросит разрешение и передаст номер для выпуска карты.</p>
+        <button id="phoneButton" type="button">Подтвердить через VK</button>
+      </section>
+
+      <form class="fallback" id="manualForm">
+        <label>
+          Если окно VK не открылось
+          <input id="manualPhone" inputmode="tel" autocomplete="tel" placeholder="+7 999 123-45-67" />
+        </label>
+        <button type="submit">Отправить номер</button>
+      </form>
+    </main>
+
+    <script src="/vk/app.js" type="module"></script>
+  </body>
+</html>

@@ -27,12 +27,19 @@ type VkCallbackPayload = {
   };
 };
 type VkKeyboardColor = "primary" | "secondary" | "positive" | "negative";
+type VkTextAction = {
+  type: "text";
+  label: string;
+  payload: string;
+};
+type VkOpenAppAction = {
+  type: "open_app";
+  label: string;
+  app_id: number;
+  hash?: string;
+};
 type VkButton = {
-  action: {
-    type: "text";
-    label: string;
-    payload: string;
-  };
+  action: VkTextAction | VkOpenAppAction;
   color: VkKeyboardColor;
 };
 type VkKeyboard = {
@@ -46,7 +53,7 @@ type VkUploadedPhoto = { server?: number | string; photo?: string; hash?: string
 type VkSavedPhoto = { owner_id: number; id: number; access_key?: string };
 
 const PHONE_PROMPT =
-  "Напишите номер телефона одним сообщением, например +7 999 123-45-67. Так выпустим вашу карту KK23.";
+  "Подтвердите телефон в мини-приложении KK23. Если оно не открылось, напишите номер одним сообщением, например +7 999 123-45-67.";
 
 export class VkLoyaltyBot implements LoyaltyNotifier {
   private readonly cardDeliveryQueue = new Map<string, Promise<void>>();
@@ -139,7 +146,7 @@ export class VkLoyaltyBot implements LoyaltyNotifier {
         await this.service.registerGuest({ phone, name, vkId: String(vkId) });
         return;
       }
-      await this.sendMessage(peerId, PHONE_PROMPT, phoneKeyboard());
+      await this.sendMessage(peerId, PHONE_PROMPT, phoneKeyboard(this.config.appId));
       return;
     }
 
@@ -162,7 +169,7 @@ export class VkLoyaltyBot implements LoyaltyNotifier {
       return;
     }
     if (command === "phone") {
-      await this.sendMessage(peerId, PHONE_PROMPT, phoneKeyboard());
+      await this.sendMessage(peerId, PHONE_PROMPT, phoneKeyboard(this.config.appId));
       return;
     }
 
@@ -337,12 +344,25 @@ function button(label: string, color: VkKeyboardColor, payload: VkPayload): VkBu
   };
 }
 
+function appButton(label: string, color: VkKeyboardColor, appId: number, hash?: string): VkButton {
+  return {
+    action: {
+      type: "open_app",
+      label,
+      app_id: appId,
+      hash,
+    },
+    color,
+  };
+}
+
 function keyboard(buttons: VkButton[][], inline = false): VkKeyboard {
   return { one_time: false, inline, buttons };
 }
 
-function phoneKeyboard(): VkKeyboard {
-  return keyboard([[button("📱 Ввести телефон", "primary", { cmd: "phone" })]]);
+function phoneKeyboard(appId: number | undefined): VkKeyboard {
+  if (!appId) return keyboard([[button("📱 Ввести телефон", "primary", { cmd: "phone" })]]);
+  return keyboard([[appButton("📱 Подтвердить телефон", "primary", appId, "phone")]]);
 }
 
 function mainKeyboard(): VkKeyboard {

@@ -42,6 +42,7 @@ await app.register(fastifyStatic, {
   root: join(here, "..", "public"),
   prefix: "/",
 });
+app.get("/vk", async (_request, reply) => reply.sendFile("vk/index.html"));
 
 await store.ensureReady();
 await registerRoutes(app, service);
