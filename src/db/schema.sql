@@ -11,12 +11,23 @@ CREATE TABLE IF NOT EXISTS guests (
   level VARCHAR NOT NULL DEFAULT 'guest',
   last_visit TIMESTAMPTZ,
   tg_id BIGINT UNIQUE,
+  vk_id BIGINT UNIQUE,
+  tg_header_message_id INTEGER,
   tg_card_message_id INTEGER,
+  vk_card_message_id INTEGER,
   card_updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS tg_header_message_id INTEGER;
 ALTER TABLE guests ADD COLUMN IF NOT EXISTS tg_card_message_id INTEGER;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vk_id BIGINT UNIQUE;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS vk_card_message_id INTEGER;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS tg_history_message_id INTEGER;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS tg_notification_ids INTEGER[] NOT NULL DEFAULT '{}';
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS tg_flow_message_id INTEGER;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE guests ADD COLUMN IF NOT EXISTS last_birthday_reward_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -37,6 +48,8 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE pending_transactions ADD COLUMN IF NOT EXISTS tg_message_id INTEGER;
 
 CREATE TABLE IF NOT EXISTS baristas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

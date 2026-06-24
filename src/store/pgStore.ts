@@ -1,5 +1,5 @@
 import pg from "pg";
-import { assertPositiveInteger, getLevel, normalizePhone } from "../domain/loyalty.js";
+import { assertPositiveInteger, birthdayRewardDenial, getLevel, normalizePhone } from "../domain/loyalty.js";
 import type { Guest, GuestRegistration, PendingTransaction, Transaction } from "../domain/types.js";
 import type { LoyaltyStore, SearchGuestInput } from "./store.js";
 
@@ -10,13 +10,21 @@ type DbGuest = {
   phone: string;
   loyalty_code: string;
   name: string;
-  birthday: string | null;
+  birthday: string | Date | null;
   total_spent: number;
   balance: number;
   level: Guest["level"];
   last_visit: Date | null;
   tg_id: string | number | null;
+  tg_header_message_id: number | null;
   tg_card_message_id: number | null;
+  tg_history_message_id: number | null;
+  tg_notification_ids: number[] | null;
+  tg_flow_message_id: number | null;
+  vk_id: string | number | null;
+  vk_card_message_id: number | null;
+  notifications_enabled: boolean;
+  last_birthday_reward_at: Date | null;
   card_updated_at: Date | null;
   created_at: Date;
 };
@@ -37,6 +45,7 @@ type DbPending = {
   points: number;
   status: PendingTransaction["status"];
   barista_id: string | null;
+  tg_message_id: number | null;
   expires_at: Date;
   created_at: Date;
 };
@@ -59,16 +68,21 @@ export class PgStore implements LoyaltyStore {
   async createOrUpdateGuest(input: GuestRegistration): Promise<Guest> {
     const phone = normalizePhone(input.phone);
     const tgId = input.tgId ?? null;
-    const existing = await this.findExistingGuest(phone, tgId);
+    const vkId = input.vkId ?? null;
+    const existing = await this.findExistingGuest(phone, tgId, vkId);
     if (existing) {
       const result = await this.pool.query<DbGuest>(
         `
         UPDATE guests
-        SET phone = $1, name = COALESCE(NULLIF($2, ''), name), birthday = COALESCE($3, birthday), tg_id = COALESCE($4, tg_id)
-        WHERE id = $5
+        SET phone = $1,
+            name = COALESCE(NULLIF($2, ''), name),
+            birthday = COALESCE($3, birthday),
+            tg_id = COALESCE($4, tg_id),
+            vk_id = COALESCE($5, vk_id)
+        WHERE id = $6
         RETURNING *
         `,
-        [phone, input.name, input.birthday ?? null, tgId, existing.id],
+        [phone, input.name, input.birthday ?? null, tgId, vkId, existing.id],
       );
       return mapGuest(result.rows[0]);
     }
@@ -78,11 +92,11 @@ export class PgStore implements LoyaltyStore {
       try {
         const result = await this.pool.query<DbGuest>(
           `
-          INSERT INTO guests (phone, loyalty_code, name, birthday, tg_id)
-          VALUES ($1, $2, $3, $4, $5)
+          INSERT INTO guests (phone, loyalty_code, name, birthday, tg_id, vk_id)
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING *
           `,
-          [phone, code, input.name, input.birthday ?? null, tgId],
+          [phone, code, input.name, input.birthday ?? null, tgId, vkId],
         );
         return mapGuest(result.rows[0]);
       } catch (error) {
@@ -100,6 +114,11 @@ export class PgStore implements LoyaltyStore {
 
   async getGuestByTelegramId(tgId: string): Promise<Guest | null> {
     const result = await this.pool.query<DbGuest>("SELECT * FROM guests WHERE tg_id = $1", [tgId]);
+    return result.rows[0] ? mapGuest(result.rows[0]) : null;
+  }
+
+  async getGuestByVkId(vkId: string): Promise<Guest | null> {
+    const result = await this.pool.query<DbGuest>("SELECT * FROM guests WHERE vk_id = $1", [vkId]);
     return result.rows[0] ? mapGuest(result.rows[0]) : null;
   }
 
@@ -133,6 +152,121 @@ export class PgStore implements LoyaltyStore {
     ]);
     if (!result.rows[0]) throw new Error("Guest not found");
     return mapGuest(result.rows[0]);
+  }
+
+  async updateTelegramHeaderMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET tg_header_message_id = $1 WHERE id = $2 RETURNING *", [
+      messageId,
+      guestId,
+    ]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async updateTelegramHistoryMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET tg_history_message_id = $1 WHERE id = $2 RETURNING *", [
+      messageId,
+      guestId,
+    ]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async updateVkCardMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET vk_card_message_id = $1 WHERE id = $2 RETURNING *", [
+      messageId,
+      guestId,
+    ]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async pushNotificationMessage(guestId: string, messageId: number): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>(
+      "UPDATE guests SET tg_notification_ids = array_append(tg_notification_ids, $1) WHERE id = $2 RETURNING *",
+      [messageId, guestId],
+    );
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async clearNotificationMessages(guestId: string): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET tg_notification_ids = '{}' WHERE id = $1 RETURNING *", [
+      guestId,
+    ]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async updateFlowMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET tg_flow_message_id = $1 WHERE id = $2 RETURNING *", [
+      messageId,
+      guestId,
+    ]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async updateGuestName(guestId: string, name: string): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET name = $1 WHERE id = $2 RETURNING *", [name, guestId]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async updateGuestBirthday(guestId: string, birthday: string | null): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET birthday = $1 WHERE id = $2 RETURNING *", [
+      birthday,
+      guestId,
+    ]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async setNotificationsEnabled(guestId: string, enabled: boolean): Promise<Guest> {
+    const result = await this.pool.query<DbGuest>("UPDATE guests SET notifications_enabled = $1 WHERE id = $2 RETURNING *", [
+      enabled,
+      guestId,
+    ]);
+    if (!result.rows[0]) throw new Error("Guest not found");
+    return mapGuest(result.rows[0]);
+  }
+
+  async grantBirthdayReward(guestId: string, points: number, now: Date): Promise<{ guest: Guest; transaction: Transaction }> {
+    assertPositiveInteger(points, "points");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const guestResult = await client.query<DbGuest>("SELECT * FROM guests WHERE id = $1 FOR UPDATE", [guestId]);
+      if (!guestResult.rows[0]) throw new Error("Guest not found");
+      const guest = mapGuest(guestResult.rows[0]);
+      const denial = birthdayRewardDenial(guest, now);
+      if (denial) throw new Error(`birthday_reward_denied:${denial}`);
+
+      const updatedGuest = await client.query<DbGuest>(
+        `
+        UPDATE guests
+        SET balance = balance + $1, last_birthday_reward_at = $2, last_visit = $2, card_updated_at = $2
+        WHERE id = $3
+        RETURNING *
+        `,
+        [points, now, guestId],
+      );
+      const transaction = await client.query<DbTransaction>(
+        `
+        INSERT INTO transactions (guest_id, type, amount, points, barista_id)
+        VALUES ($1, 'gift', $2, $2, NULL)
+        RETURNING *
+        `,
+        [guestId, points],
+      );
+      await client.query("COMMIT");
+      return { guest: mapGuest(updatedGuest.rows[0]), transaction: mapTransaction(transaction.rows[0]) };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async earnPoints(input: { guestId: string; amount: number; points: number; baristaId?: string | null }): Promise<{ guest: Guest; transaction: Transaction }> {
@@ -175,7 +309,6 @@ export class PgStore implements LoyaltyStore {
 
   async createPendingSpend(input: { guestId: string; points: number; baristaId?: string | null }): Promise<PendingTransaction> {
     assertPositiveInteger(input.points, "points");
-    await this.expirePendingTransactions();
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -185,7 +318,7 @@ export class PgStore implements LoyaltyStore {
       if (guest.balance < input.points) throw new Error("Not enough points");
 
       const active = await client.query<DbPending>(
-        "SELECT * FROM pending_transactions WHERE guest_id = $1 AND status = 'pending' LIMIT 1",
+        "SELECT * FROM pending_transactions WHERE guest_id = $1 AND status = 'pending' AND expires_at > now() LIMIT 1",
         [input.guestId],
       );
       if (active.rows[0]) throw new Error("Guest already has an active pending spend");
@@ -208,29 +341,36 @@ export class PgStore implements LoyaltyStore {
     }
   }
 
+  async attachPendingMessage(pendingId: string, messageId: number): Promise<PendingTransaction> {
+    const result = await this.pool.query<DbPending>(
+      "UPDATE pending_transactions SET tg_message_id = $1 WHERE id = $2 RETURNING *",
+      [messageId, pendingId],
+    );
+    if (!result.rows[0]) throw new Error("Pending spend not found");
+    return mapPending(result.rows[0]);
+  }
+
   async getPending(id: string): Promise<PendingTransaction | null> {
-    await this.expirePendingTransactions();
     const result = await this.pool.query<DbPending>("SELECT * FROM pending_transactions WHERE id = $1", [id]);
     return result.rows[0] ? mapPending(result.rows[0]) : null;
   }
 
   async getActivePendingForGuest(guestId: string): Promise<PendingTransaction | null> {
-    await this.expirePendingTransactions();
     const result = await this.pool.query<DbPending>(
-      "SELECT * FROM pending_transactions WHERE guest_id = $1 AND status = 'pending' LIMIT 1",
+      "SELECT * FROM pending_transactions WHERE guest_id = $1 AND status = 'pending' AND expires_at > now() LIMIT 1",
       [guestId],
     );
     return result.rows[0] ? mapPending(result.rows[0]) : null;
   }
 
   async confirmPending(id: string): Promise<{ guest: Guest; pending: PendingTransaction; transaction: Transaction }> {
-    await this.expirePendingTransactions();
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
       const pendingResult = await client.query<DbPending>("SELECT * FROM pending_transactions WHERE id = $1 FOR UPDATE", [id]);
       const pending = pendingResult.rows[0];
       if (!pending || pending.status !== "pending") throw new Error("Pending spend is not active");
+      if (pending.expires_at.getTime() <= Date.now()) throw new Error("Pending spend expired");
 
       const guestResult = await client.query<DbGuest>("SELECT * FROM guests WHERE id = $1 FOR UPDATE", [pending.guest_id]);
       const guest = guestResult.rows[0];
@@ -296,10 +436,10 @@ export class PgStore implements LoyaltyStore {
     return result.rows.map(mapTransaction);
   }
 
-  private async findExistingGuest(phone: string, tgId: string | null): Promise<Guest | null> {
+  private async findExistingGuest(phone: string, tgId: string | null, vkId: string | null): Promise<Guest | null> {
     const result = await this.pool.query<DbGuest>(
-      "SELECT * FROM guests WHERE phone = $1 OR ($2::bigint IS NOT NULL AND tg_id = $2) LIMIT 1",
-      [phone, tgId],
+      "SELECT * FROM guests WHERE phone = $1 OR ($2::bigint IS NOT NULL AND tg_id = $2) OR ($3::bigint IS NOT NULL AND vk_id = $3) LIMIT 1",
+      [phone, tgId, vkId],
     );
     return result.rows[0] ? mapGuest(result.rows[0]) : null;
   }
@@ -311,13 +451,21 @@ function mapGuest(row: DbGuest): Guest {
     phone: row.phone,
     loyaltyCode: row.loyalty_code,
     name: row.name,
-    birthday: row.birthday,
+    birthday: row.birthday == null ? null : typeof row.birthday === "string" ? row.birthday.slice(0, 10) : row.birthday.toISOString().slice(0, 10),
     totalSpent: Number(row.total_spent),
     balance: Number(row.balance),
     level: row.level,
     lastVisit: row.last_visit?.toISOString() ?? null,
     tgId: row.tg_id === null ? null : String(row.tg_id),
+    tgHeaderMessageId: row.tg_header_message_id,
     tgCardMessageId: row.tg_card_message_id,
+    tgHistoryMessageId: row.tg_history_message_id,
+    tgNotificationIds: row.tg_notification_ids ?? [],
+    tgFlowMessageId: row.tg_flow_message_id,
+    vkId: row.vk_id === null ? null : String(row.vk_id),
+    vkCardMessageId: row.vk_card_message_id,
+    notificationsEnabled: row.notifications_enabled,
+    lastBirthdayRewardAt: row.last_birthday_reward_at?.toISOString() ?? null,
     cardUpdatedAt: row.card_updated_at?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
   };
@@ -342,6 +490,7 @@ function mapPending(row: DbPending): PendingTransaction {
     points: Number(row.points),
     status: row.status,
     baristaId: row.barista_id,
+    tgMessageId: row.tg_message_id,
     expiresAt: row.expires_at.toISOString(),
     createdAt: row.created_at.toISOString(),
   };

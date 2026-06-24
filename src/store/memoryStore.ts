@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { assertPositiveInteger, getLevel, normalizePhone } from "../domain/loyalty.js";
+import { assertPositiveInteger, birthdayRewardDenial, getLevel, normalizePhone } from "../domain/loyalty.js";
 import type { Guest, GuestRegistration, PendingTransaction, Transaction } from "../domain/types.js";
 import type { LoyaltyStore, SearchGuestInput } from "./store.js";
 
@@ -28,7 +28,10 @@ export class MemoryStore implements LoyaltyStore {
   async createOrUpdateGuest(input: GuestRegistration): Promise<Guest> {
     const phone = normalizePhone(input.phone);
     const tgId = input.tgId ?? null;
-    const existing = [...this.guests.values()].find((guest) => guest.phone === phone || (tgId && guest.tgId === tgId));
+    const vkId = input.vkId ?? null;
+    const existing = [...this.guests.values()].find(
+      (guest) => guest.phone === phone || (tgId && guest.tgId === tgId) || (vkId && guest.vkId === vkId),
+    );
 
     if (existing) {
       const updated: Guest = {
@@ -37,6 +40,7 @@ export class MemoryStore implements LoyaltyStore {
         name: input.name || existing.name,
         birthday: input.birthday ?? existing.birthday,
         tgId: tgId ?? existing.tgId,
+        vkId: vkId ?? existing.vkId,
       };
       this.guests.set(updated.id, updated);
       return updated;
@@ -55,7 +59,15 @@ export class MemoryStore implements LoyaltyStore {
       level: "guest",
       lastVisit: null,
       tgId,
+      tgHeaderMessageId: null,
       tgCardMessageId: null,
+      tgHistoryMessageId: null,
+      tgNotificationIds: [],
+      tgFlowMessageId: null,
+      vkId,
+      vkCardMessageId: null,
+      notificationsEnabled: true,
+      lastBirthdayRewardAt: null,
       cardUpdatedAt: null,
       createdAt: nowIso(),
     };
@@ -69,6 +81,10 @@ export class MemoryStore implements LoyaltyStore {
 
   async getGuestByTelegramId(tgId: string): Promise<Guest | null> {
     return [...this.guests.values()].find((guest) => guest.tgId === tgId) ?? null;
+  }
+
+  async getGuestByVkId(vkId: string): Promise<Guest | null> {
+    return [...this.guests.values()].find((guest) => guest.vkId === vkId) ?? null;
   }
 
   async searchGuest(input: SearchGuestInput): Promise<Guest | null> {
@@ -95,6 +111,93 @@ export class MemoryStore implements LoyaltyStore {
     const updated = { ...guest, tgCardMessageId: messageId };
     this.guests.set(updated.id, updated);
     return updated;
+  }
+
+  async updateTelegramHeaderMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, tgHeaderMessageId: messageId };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async updateTelegramHistoryMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, tgHistoryMessageId: messageId };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async updateVkCardMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, vkCardMessageId: messageId };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async pushNotificationMessage(guestId: string, messageId: number): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, tgNotificationIds: [...guest.tgNotificationIds, messageId] };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async clearNotificationMessages(guestId: string): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, tgNotificationIds: [] };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async updateFlowMessage(guestId: string, messageId: number | null): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, tgFlowMessageId: messageId };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async updateGuestName(guestId: string, name: string): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, name };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async updateGuestBirthday(guestId: string, birthday: string | null): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, birthday };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async setNotificationsEnabled(guestId: string, enabled: boolean): Promise<Guest> {
+    const guest = await this.requireGuest(guestId);
+    const updated = { ...guest, notificationsEnabled: enabled };
+    this.guests.set(updated.id, updated);
+    return updated;
+  }
+
+  async grantBirthdayReward(guestId: string, points: number, now: Date): Promise<{ guest: Guest; transaction: Transaction }> {
+    assertPositiveInteger(points, "points");
+    const guest = await this.requireGuest(guestId);
+    const denial = birthdayRewardDenial(guest, now);
+    if (denial) throw new Error(`birthday_reward_denied:${denial}`);
+    const updated: Guest = {
+      ...guest,
+      balance: guest.balance + points,
+      lastBirthdayRewardAt: now.toISOString(),
+      lastVisit: now.toISOString(),
+      cardUpdatedAt: now.toISOString(),
+    };
+    const transaction = this.makeTransaction({
+      guestId: guest.id,
+      type: "gift",
+      amount: points,
+      points,
+      baristaId: null,
+    });
+    this.guests.set(updated.id, updated);
+    this.transactions.set(transaction.id, transaction);
+    return { guest: updated, transaction };
   }
 
   async earnPoints(input: { guestId: string; amount: number; points: number; baristaId?: string | null }): Promise<{ guest: Guest; transaction: Transaction }> {
@@ -136,6 +239,7 @@ export class MemoryStore implements LoyaltyStore {
       points: input.points,
       status: "pending",
       baristaId: input.baristaId ?? null,
+      tgMessageId: null,
       expiresAt,
       createdAt: nowIso(),
     };
@@ -143,19 +247,32 @@ export class MemoryStore implements LoyaltyStore {
     return pending;
   }
 
+  async attachPendingMessage(pendingId: string, messageId: number): Promise<PendingTransaction> {
+    const pending = this.pending.get(pendingId);
+    if (!pending) throw new Error("Pending spend not found");
+    const updated = { ...pending, tgMessageId: messageId };
+    this.pending.set(updated.id, updated);
+    return updated;
+  }
+
   async getPending(id: string): Promise<PendingTransaction | null> {
     return this.pending.get(id) ?? null;
   }
 
   async getActivePendingForGuest(guestId: string): Promise<PendingTransaction | null> {
-    await this.expirePendingTransactions();
-    return [...this.pending.values()].find((pending) => pending.guestId === guestId && pending.status === "pending") ?? null;
+    const now = Date.now();
+    return (
+      [...this.pending.values()].find(
+        (pending) =>
+          pending.guestId === guestId && pending.status === "pending" && new Date(pending.expiresAt).getTime() > now,
+      ) ?? null
+    );
   }
 
   async confirmPending(id: string): Promise<{ guest: Guest; pending: PendingTransaction; transaction: Transaction }> {
-    await this.expirePendingTransactions();
     const pending = this.pending.get(id);
     if (!pending || pending.status !== "pending") throw new Error("Pending spend is not active");
+    if (new Date(pending.expiresAt).getTime() <= Date.now()) throw new Error("Pending spend expired");
     const guest = await this.requireGuest(pending.guestId);
     if (guest.balance < pending.points) throw new Error("Not enough points");
 

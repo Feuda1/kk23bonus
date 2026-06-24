@@ -8,6 +8,7 @@ const guestRegistrationSchema = z.object({
   name: z.string().min(1),
   birthday: z.string().date().nullable().optional(),
   tgId: z.string().nullable().optional(),
+  vkId: z.string().nullable().optional(),
 });
 
 const earnSchema = z.object({
@@ -74,6 +75,20 @@ export async function registerRoutes(app: FastifyInstance, service: LoyaltyServi
   app.post("/api/transactions/earn", async (request) => {
     const input = earnSchema.parse(request.body);
     return service.earn(input);
+  });
+
+  app.post("/api/guests/:id/birthday-reward", async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = z.object({ points: z.number().int().positive().optional() }).parse(request.body ?? {});
+    try {
+      return await service.grantBirthdayReward(id, body.points);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("birthday_reward_denied:")) {
+        return reply.code(409).send({ error: "birthday_reward_denied", reason: message.split(":")[1] });
+      }
+      throw error;
+    }
   });
 
   app.post("/api/pending-spend", async (request, reply) => {

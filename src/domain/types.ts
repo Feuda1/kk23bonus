@@ -11,7 +11,15 @@ export type Guest = {
   level: LoyaltyLevel;
   lastVisit: string | null;
   tgId: string | null;
+  tgHeaderMessageId: number | null;
   tgCardMessageId: number | null;
+  tgHistoryMessageId: number | null;
+  tgNotificationIds: number[];
+  tgFlowMessageId: number | null;
+  vkId: string | null;
+  vkCardMessageId: number | null;
+  notificationsEnabled: boolean;
+  lastBirthdayRewardAt: string | null;
   cardUpdatedAt: string | null;
   createdAt: string;
 };
@@ -36,6 +44,7 @@ export type PendingTransaction = {
   points: number;
   status: PendingStatus;
   baristaId: string | null;
+  tgMessageId: number | null;
   expiresAt: string;
   createdAt: string;
 };
@@ -45,4 +54,5 @@ export type GuestRegistration = {
   name: string;
   birthday?: string | null;
   tgId?: string | null;
+  vkId?: string | null;
 };

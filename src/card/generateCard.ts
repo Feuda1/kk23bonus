@@ -18,6 +18,7 @@ export async function generateLoyaltyCard(guest: Guest): Promise<Buffer> {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/Moscow",
   }).format(guest.cardUpdatedAt ? new Date(guest.cardUpdatedAt) : new Date());
 
   const svg = `
@@ -33,13 +34,11 @@ export async function generateLoyaltyCard(guest: Guest): Promise<Buffer> {
         <stop offset="0.48" stop-color="#b8793e"/>
         <stop offset="1" stop-color="#392012"/>
       </radialGradient>
-      <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="#160a04" flood-opacity="0.45"/>
-      </filter>
     </defs>
     <rect width="1200" height="720" fill="url(#bg)"/>
     <path d="M0 0H1200V720H0V0Z" fill="#1d0e08" opacity="0.18"/>
-    <circle cx="930" cy="360" r="190" fill="url(#cup)" filter="url(#shadow)"/>
+    <ellipse cx="930" cy="566" rx="150" ry="30" fill="#160a04" opacity="0.28"/>
+    <circle cx="930" cy="360" r="190" fill="url(#cup)"/>
     <circle cx="930" cy="360" r="132" fill="#f1c995"/>
     <circle cx="930" cy="360" r="92" fill="#7b3f1d"/>
     <path d="M858 367C894 306 968 306 1002 367C958 334 902 334 858 367Z" fill="#f8e8d1"/>
